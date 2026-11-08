@@ -7,7 +7,7 @@ Cross-chain deposits, wallet connection, and transaction execution are
 **roadmap items**. This version implements an optional **read-only 1Click dry
 quote** source; it never creates a transaction or handles funds.
 
-## Current status
+## What Phlax implements today
 
 - One-page simulation dashboard with a NEAR-only DCA plan builder.
 - One calculation module for weekly budget, cadence, per-run amount, and
@@ -31,9 +31,8 @@ quote** source; it never creates a transaction or handles funds.
 - **Reset demo** action that restores the seeded plan and history.
 - Header badge that reports the live quote-source status from
   `GET /api/quote/meta` (mock, optional 1Click dry, or unavailable).
-- **No wallet connection.**
-- **No deposits, custody, signing, or transactions.**
-- **No client access to environment values, API credentials, or request data.**
+- API responses never expose environment values, API credentials, or request
+  data.
 
 Mock mode is the default. The backend makes no 1Click request unless
 `QUOTE_SOURCE=1click-dry` is set in local `.env`.
@@ -49,6 +48,21 @@ Mock mode is the default. The backend makes no 1Click request unless
 
 No database, contract, wallet library, or transaction library is installed.
 
+## Provenance and baseline
+
+- The GitHub repository was created on 2026-11-07.
+- The repository history begins at commit `f7c3aef` on 2026-11-07. Every commit
+  made so far falls inside the NEAR Hackathon development window that opened on
+  2026-11-01.
+- There is no earlier baseline tag, branch, or pre-hackathon history in this
+  repository.
+- Third-party libraries are exactly the ones listed in **Stack** and pinned in
+  the three lockfiles (`package-lock.json`, `backend/package-lock.json`,
+  `frontend/package-lock.json`). No other runtime service is required.
+- The `defi` track prompt describes a cross-chain DCA vault. This repository is
+  a dry-run quote and simulation prototype, not a completed vault; see
+  **What Phlax does not implement yet**.
+
 ## Prerequisites
 
 - Node.js `^20.19.0` or `>=22.12.0` (required by Vite 8)
@@ -57,6 +71,120 @@ No database, contract, wallet library, or transaction library is installed.
 If you are in this Windows/WSL shell and `node` is not found, use PowerShell or
 CMD, or call `node.exe` explicitly. `npm` normally resolves the Windows Node
 installation automatically.
+
+## Judge quickstart (copy-paste)
+
+This is the shortest path a judge can follow. Run everything from the repository
+root. Expected output is abridged; timings and package versions will vary.
+
+1. **Install dependencies**
+
+   ```bash
+   npm run setup
+   ```
+
+   Expected: three installs run (root, `backend/`, `frontend/`), and each ends
+   with `found 0 vulnerabilities`.
+
+2. **Run the automated tests**
+
+   ```bash
+   npm test
+   ```
+
+   Expected: `tests 21`, `pass 21`, `fail 0`. The tests use mocked network
+   responses and make no 1Click request.
+
+3. **Run syntax checks and a production build**
+
+   ```bash
+   npm run check
+   ```
+
+   Expected: the backend `node --check` commands print no errors, then Vite
+   prints `✓ built in …` and a `dist/` summary.
+
+4. **Start the API and web app**
+
+   ```bash
+   npm run dev
+   ```
+
+   Expected:
+
+   ```text
+   Phlax API (dry-run) running on http://localhost:5000
+   Network: not connected (NEAR testnet planned) | Quote source: mock (local mock, no external calls) | Wallet: disabled in demo
+   VITE v… ready in … ms
+   ➜ Local: http://localhost:5173/
+   ```
+
+   Open the URL Vite prints. If port 5173 is already in use, Vite prints
+   `http://localhost:5174/` instead; use that URL.
+
+5. **Check the health endpoint**
+
+   ```bash
+   curl http://localhost:5000/api/health
+   ```
+
+   Expected (abridged):
+
+   ```json
+   {
+     "success": true,
+     "data": {
+       "status": "ok",
+       "mode": "dry-run",
+       "network": "not-connected",
+       "wallet": "disabled-in-demo",
+       "quoteSource": {
+         "source": "mock",
+         "liveRequestsEnabled": false,
+         "dryOnly": true
+       }
+     }
+   }
+   ```
+
+6. **Save a strategy**
+
+   In the web app, keep the default plan: weekly budget `100`, asset `NEAR`,
+   cadence `Daily`, slippage cap `0.5`. Click **Save strategy**.
+
+   Expected:
+
+   - Notice: `Strategy saved: NEAR DCA · Daily · $100.00/wk. Simulated cycles use this snapshot.`
+   - **Active strategy** shows an ID like `plan-…-1`, status `Active`, and the
+     summary values `$100.00` weekly budget, `$14.29` per run, `Daily`,
+     `0.5%` slippage cap, `USDC → NEAR`, and `7` runs per week. The summary
+     labels render in uppercase.
+   - History is still the 5 seeded rows.
+
+7. **Run four cycles**
+
+   Click **Run next 4 cycles**. The button is disabled until the header badge
+   confirms `Mock mode · no external calls`.
+
+   Expected:
+
+   - History grows from 5 to **9** rows.
+   - Exactly four new rows, labelled `Simulated cycle 1 of 4 · plan-…` through
+     `Simulated cycle 4 of 4 · plan-…`.
+   - Statuses: **2 × Simulated fill**, **1 × Simulated failure**,
+     **1 × Simulated refund**.
+   - Notice: `4 simulated cycles added for NEAR DCA · Daily · $100.00/wk. No transaction was sent and no funds moved.`
+
+8. **Reset the demo**
+
+   Click **Reset demo**.
+
+   Expected:
+
+   - **Active strategy** returns to `No saved strategy yet.`
+   - History returns to the 5 seeded rows (3 fill, 1 failure, 1 refund).
+   - Budget returns to `100`.
+   - Notice: `Demo reset. Seeded history restored; no transactions exist.`
 
 ## Setup
 
@@ -340,7 +468,35 @@ refund address, API key, or JWT.
 - There is no persistence, authentication, or rate limiting on the local API;
   it is a prototype.
 
-## Next milestones (roadmap, not implemented)
+## Demo post and screenshots
+
+No public demo post, video, or screenshots exist in this repository yet.
+
+- Demo post (X): _not published yet_
+- Demo video: _not recorded yet_
+- Screenshots: _not added yet_
+
+When the post is published, it should state that the project was built at NEAR
+HACKATHON and tag `@NEARProtocol` and `#NEARHackathon`. Replace the placeholders
+with the real links only after they exist.
+
+## What Phlax does not implement yet
+
+Not implemented in this repository:
+
+- Wallet connection, account display, or signatures.
+- USDC deposits, custody, or fund movement.
+- Trade execution, settlement, or transaction submission.
+- A scheduler or interval runner; the plan form and **Run next 4 cycles** are
+  manual demo actions.
+- Real quote status tracking. `FAILED` and `REFUNDED` appear only as simulated
+  history labels.
+- BTC or ETH targets; only NEAR is selectable.
+- Cross-chain deposits or settlement.
+- A NEAR contract or Chain Signatures.
+- Persistence, authentication, or rate limiting. The API is local-only.
+
+Ordered next milestones:
 
 1. Connect a NEAR wallet and display the account ID.
 2. Add opt-in transaction execution and status tracking after a separate safety
