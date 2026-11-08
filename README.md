@@ -4,8 +4,9 @@ A **NEAR-only dry-run prototype** for a non-custodial DCA vault. This repository
 is the safe MVP skeleton for NEAR Hackathon Track 01: Unstoppable DeFi (`defi`).
 
 Cross-chain deposits, wallet connection, and transaction execution are
-**roadmap items**. This version implements an optional **read-only 1Click dry
-quote** source; it never creates a transaction or handles funds.
+**roadmap items**. This version implements an optional **read-only public market
+price** source and an optional **read-only 1Click dry quote** source; it never
+creates a transaction or handles funds.
 
 ## What Phlax implements today
 
@@ -15,27 +16,41 @@ quote** source; it never creates a transaction or handles funds.
 - Client-side **Save strategy** action with an ID, name, creation timestamp,
   status, and an Active strategy summary. State only: no database or storage
   dependency, and a refresh clears it.
-- **Run next 4 cycles** demo: one mock quote request produces four
+- **Run next 4 cycles** demo: one dry-run quote request produces four
   deterministic, clearly labelled simulated history rows
-  (fill, fill, failed, refunded). Runs are gated to confirmed mock mode.
+  (fill, fill, failed, refunded). Runs are gated to the confirmed dry-run quote
+  engine.
 - Quote endpoint (`POST /api/quote`) with two sources:
-  - **Mock (default):** deterministic local quotes, no external calls.
+  - **Dry-run engine (default, `QUOTE_SOURCE=mock`):** simulated local quotes;
+    no 1Click call and no deposit address.
   - **1Click dry (optional):** read-only mainnet quotes with `dry: true`
     hardcoded on the server.
+- An independent, optional **read-only market price** layer (`PRICE_SOURCE`):
+  - **Local reference (default):** deterministic reference prices, no external
+    calls.
+  - **Coinbase Exchange (optional):** public USD ticker prices for NEAR, BTC,
+    and ETH. Quote targets remain NEAR-only.
+- Price provenance on every dry-run quote: `priceSource`, `priceObservedAt`,
+  `priceAgeMs`, and `priceStale`. A market ticker price is never presented as an
+  executable NEAR Intents quote.
+- A **labelled mock fallback** when the live price feed fails, or strict `503`
+  errors with `PRICE_FALLBACK=off`.
 - Exact fixed-point quote arithmetic (BigInt / decimal strings) for token
   decimals, expected output, minimum output, and slippage.
 - Automated backend tests (`npm test`) with mocked network responses. Tests
-  never contact 1Click.
+  never contact 1Click or Coinbase.
 - Deterministic **Plan assistant** (rules, not an AI model).
 - Simulated trade history with fill, failed, and refunded outcomes.
 - **Reset demo** action that restores the seeded plan and history.
-- Header badge that reports the live quote-source status from
-  `GET /api/quote/meta` (mock, optional 1Click dry, or unavailable).
+- Header badges that report the quote-source and price-source status from
+  `GET /api/quote/meta` (dry-run engine, optional 1Click dry, local reference
+  price, optional Coinbase price, or unavailable).
 - API responses never expose environment values, API credentials, or request
   data.
 
-Mock mode is the default. The backend makes no 1Click request unless
-`QUOTE_SOURCE=1click-dry` is set in local `.env`.
+Dry-run mode is the default. The backend makes no 1Click request unless
+`QUOTE_SOURCE=1click-dry` is set in local `.env`, and no market-data request
+unless `PRICE_SOURCE=coinbase` is set in local `.env`.
 
 ## Stack
 
@@ -43,7 +58,7 @@ Mock mode is the default. The backend makes no 1Click request unless
 | --- | --- |
 | Frontend | Vite 8 + React 19 + plain CSS |
 | Backend | Express 5 (ES modules) |
-| Quote flow | Local mock generator by default; optional 1Click dry quotes |
+| Quote flow | Local dry-run generator by default; optional read-only Coinbase prices and 1Click dry quotes |
 | Data | In-memory React state and hard-coded simulated history |
 
 No database, contract, wallet library, or transaction library is installed.
@@ -92,8 +107,8 @@ root. Expected output is abridged; timings and package versions will vary.
    npm test
    ```
 
-   Expected: `tests 21`, `pass 21`, `fail 0`. The tests use mocked network
-   responses and make no 1Click request.
+   Expected: `tests 42`, `pass 42`, `fail 0`. The tests use mocked network
+   responses and make no 1Click or Coinbase request.
 
 3. **Run syntax checks and a production build**
 
@@ -114,7 +129,7 @@ root. Expected output is abridged; timings and package versions will vary.
 
    ```text
    Phlax API (dry-run) running on http://localhost:5000
-   Network: not connected (NEAR testnet planned) | Quote source: mock (local mock, no external calls) | Wallet: disabled in demo
+   Network: not connected (NEAR testnet planned) | Quote source: mock (local dry-run engine) | Price source: mock (local reference, no external calls) | Wallet: disabled in demo
    VITE v… ready in … ms
    ➜ Local: http://localhost:5173/
    ```
@@ -164,7 +179,7 @@ root. Expected output is abridged; timings and package versions will vary.
 7. **Run four cycles**
 
    Click **Run next 4 cycles**. The button is disabled until the header badge
-   confirms `Mock mode · no external calls`.
+   confirms `Dry-run quote engine`.
 
    Expected:
 
@@ -192,7 +207,7 @@ From the repository root:
 
 ```bash
 npm run setup
-cp .env.example .env   # optional; mock mode works without it
+cp .env.example .env   # optional; dry-run mode works without it
 npm run dev
 ```
 
@@ -217,23 +232,73 @@ npm test    # backend tests with mocked network responses
 npm run check
 ```
 
-`npm test` runs the Node test suite in `backend/test`. It uses mocked token
-and quote responses, so it makes no real 1Click request. `npm run check` runs
-Node syntax checks on the backend and a production build of the frontend.
+`npm test` runs the Node test suite in `backend/test`. It uses mocked token,
+quote, and market-ticker responses, so it makes no real 1Click or Coinbase
+request. `npm run check` runs Node syntax checks on the backend and a production
+build of the frontend.
 
-## Quote sources
+## Quote and price sources
 
-### Mock (default)
+### Dry-run quote engine (default)
 
-`QUOTE_SOURCE` is unset or `mock`. Quotes are generated locally and no external
-request is made. The UI labels them **Mock quote** and shows the source,
-fetched time, route, input, expected output, minimum output, slippage, and
-estimate.
+`QUOTE_SOURCE` is unset or `mock`. Quotes are simulated locally and no 1Click
+request is made. The UI labels them **Dry-run quote** and shows the source,
+market-price provenance, fetched time, route, input, expected output, minimum
+output, and slippage.
+
+The dry-run engine can use either a local reference price or a real, read-only
+market price. The quote `source` stays `mock` in both cases so that simulation
+labels and the run-demo gate remain intact.
+
+### Market prices (optional)
+
+`PRICE_SOURCE` controls the price used for the simulated token quantity:
+
+- `mock` (default): deterministic local reference prices. No network request.
+- `coinbase`: public, read-only USD tickers from Coinbase Exchange. Only
+  `NEAR-USD`, `BTC-USD`, and `ETH-USD` are supported, and quote targets remain
+  NEAR-only.
+
+```bash
+PRICE_SOURCE=coinbase
+PRICE_FALLBACK=labeled-mock   # default; or "off" for strict errors
+# Optional thresholds in milliseconds:
+# PRICE_TTL_MS=15000          # cache lifetime before a refresh
+# PRICE_STALE_MS=60000        # flag the price as stale after this age
+# PRICE_MAX_AGE_MS=300000     # hard reject a last trade older than this
+```
+
+Behavior and limits:
+
+- The three USD pairs were verified against Coinbase's public products endpoint
+  before implementation: `NEAR-USD`, `BTC-USD`, and `ETH-USD` each reported
+  `status: "online"` with `trading_disabled: false`.
+- Requests go only to
+  `https://api.exchange.coinbase.com/products/<PAIR>/ticker`. No API key is used.
+- The ticker `price` and `time` fields are strictly validated. Missing,
+  malformed, non-string, non-positive, out-of-range, or future-dated values are
+  rejected.
+- The last-trade time must be no older than `PRICE_MAX_AGE_MS`. A trade older
+  than `PRICE_STALE_MS` is still shown but flagged `priceStale: true`.
+- Responses are cached for `PRICE_TTL_MS`; concurrent requests share one
+  upstream call.
+- If the feed fails and `PRICE_FALLBACK=labeled-mock`, the quote uses a local
+  reference price with `priceSource: "mock-fallback"` and `priceStale: true`.
+  The UI labels it clearly as fallback, not market data.
+- If `PRICE_FALLBACK=off`, a failed feed returns `503 PRICE_UNAVAILABLE`; there
+  is no silent substitution.
+- Invalid `PRICE_SOURCE` or `PRICE_FALLBACK` values return `503`; they do not
+  silently fall back to defaults.
+- A market ticker price is **not** an executable NEAR Intents quote. It is used
+  only to simulate a token quantity in dry-run mode. No wallet, signature,
+  deposit, or transaction is involved.
+- The UI shows the price source and last-trade timestamp for each quote. The
+  health and meta endpoints expose non-secret price-source status.
 
 ### 1Click dry quotes (optional)
 
-1Click is **mainnet-only**; there is no testnet version. Mock mode remains the
-safe default. To enable the optional read-only dry source, set these values in
+1Click is **mainnet-only**; there is no testnet version. Dry-run mode remains
+the safe default. To enable the optional read-only dry source, set these values in
 your local `.env` and restart the API:
 
 ```bash
@@ -299,23 +364,45 @@ token list as `wNEAR` (`nep141:wrap.near`); both symbols are accepted.
 ### `GET /api/health`
 
 Returns dry-run mode, network status (`not-connected`), planned NEAR
-configuration, and a non-secret `quoteSource` status block:
+configuration, a non-secret `quoteSource` status block, and a non-secret
+`priceSource` status block:
 
 ```json
 {
-  "source": "mock",
-  "network": "local-mock",
-  "liveRequestsEnabled": false,
-  "configured": true,
-  "dryOnly": true,
-  "missingConfiguration": []
+  "success": true,
+  "data": {
+    "status": "ok",
+    "mode": "dry-run",
+    "network": "not-connected",
+    "externalCalls": "disabled",
+    "quoteSource": {
+      "source": "mock",
+      "network": "local-mock",
+      "liveRequestsEnabled": false,
+      "configured": true,
+      "dryOnly": true,
+      "missingConfiguration": []
+    },
+    "priceSource": {
+      "priceSource": "mock",
+      "provider": "local reference",
+      "network": "local-reference",
+      "liveRequestsEnabled": false,
+      "configured": true,
+      "fallback": "labeled-mock"
+    }
+  }
 }
 ```
 
+The health response also reports `externalCalls` as `disabled`,
+`public-market-data-only`, or `1click-dry-quote-only`.
+
 ### `GET /api/quote/meta`
 
-Returns the supported asset (NEAR only), quote limits, and the same non-secret
-`quoteSource` status.
+Returns the supported quote asset (NEAR only), quote limits, the same non-secret
+`quoteSource` status, and a `market` block with `priceSource`, provider,
+fallback mode, thresholds, and per-pair `lastObservedAt`.
 
 ### `POST /api/quote`
 
@@ -330,10 +417,11 @@ Request:
 ```
 
 The request accepts no `dry`, `dryRun`, `depositAddress`, `depositMemo`,
-`chainDepositAddresses`, `depositSubmit`, or `timeWhenInactive` fields. Any of
-those keys is rejected with `400`.
+`chainDepositAddresses`, `depositSubmit`, `timeWhenInactive`, or price/fallback
+fields such as `priceUsd`, `priceSource`, or `fallback`. Any of those keys is
+rejected with `400`; the server alone decides the price source.
 
-Mock response (abridged):
+Dry-run response (abridged):
 
 ```json
 {
@@ -348,6 +436,10 @@ Mock response (abridged):
     "feeUsd": "0.04",
     "netUsd": "14.25",
     "priceUsd": "5.20208",
+    "priceSource": "coinbase",
+    "priceObservedAt": "...",
+    "priceAgeMs": 1200,
+    "priceStale": false,
     "assetAmount": "2.738...",
     "amountOut": "2738...",
     "amountOutFormatted": "2.738...",
@@ -409,9 +501,10 @@ refund address, API key, or JWT.
 │   │   ├── server.js          Express app, health, CORS, error handling
 │   │   ├── routes/quote.routes.js
 │   │   └── services/
-│   │       ├── quote.service.js       local mock quote generator
+│   │       ├── quote.service.js       local dry-run quote generator
 │   │       ├── quote.limits.js        shared validation and limits
 │   │       ├── quote.math.js          exact decimal / BigInt quote math
+│   │       ├── market.service.js      optional read-only Coinbase prices
 │   │       └── oneclick.service.js    optional read-only 1Click dry quotes
 │   └── test/                  mocked-network automated tests
 ├── frontend/
@@ -432,7 +525,10 @@ refund address, API key, or JWT.
 ## Safety boundaries
 
 - Demo mode is **NEAR-only, dry-run, and not connected to a wallet**.
-- Mock quotes are the default and make no external calls.
+- The dry-run quote engine is the default. With `PRICE_SOURCE=mock` and
+  `QUOTE_SOURCE=mock`, no external calls are made.
+- The optional market-price source is **public, read-only, and keyless**. It
+  only reads Coinbase USD tickers. A ticker price is not an executable quote.
 - The optional 1Click source is **mainnet-only and read-only**. It requests dry
   quotes only.
 - 1Click dry quotes require public recipient/refund addresses only to shape the
@@ -458,13 +554,18 @@ refund address, API key, or JWT.
   refresh resets them to the seeded demo state.
 - Only one active strategy exists at a time; saving again replaces it. There is
   no strategy list, open, or delete flow.
-- The four-cycle run demo uses fixed outcomes and a single mock quote. It is not
-  execution, scheduling, or proof that any trade occurred.
+- The four-cycle run demo uses fixed outcomes and a single dry-run quote. It is
+  not execution, scheduling, or proof that any trade occurred.
 - 1Click responses only have their signature presence/type checked.
   Cryptographic signature verification is not implemented.
 - The response allowlist is based on the published OpenAPI schema. A future
   1Click field will be rejected until the allowlist is updated deliberately.
 - The live source supports the NEAR-only DCA route (USDC on NEAR to NEAR/wNEAR).
+- Market prices are best-effort public ticker data. NEAR trades can be
+  intermittent, so a ticker may briefly be flagged stale. Coinbase's public
+  rate limit applies; the service caches for 15 seconds and caps concurrent
+  requests, but it is not a production market-data system.
+- BTC and ETH have market prices but are not selectable quote targets yet.
 - There is no persistence, authentication, or rate limiting on the local API;
   it is a prototype.
 
@@ -491,7 +592,8 @@ Not implemented in this repository:
   manual demo actions.
 - Real quote status tracking. `FAILED` and `REFUNDED` appear only as simulated
   history labels.
-- BTC or ETH targets; only NEAR is selectable.
+- BTC or ETH quote targets; only NEAR is selectable. BTC/ETH prices are
+  display-only market data.
 - Cross-chain deposits or settlement.
 - A NEAR contract or Chain Signatures.
 - Persistence, authentication, or rate limiting. The API is local-only.

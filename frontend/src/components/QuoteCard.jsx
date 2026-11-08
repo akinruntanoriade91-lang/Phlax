@@ -21,6 +21,18 @@ function formatSlippage(bps) {
   return `${formatDecimal(`${whole}.${fraction}`, 2, 0)}%`;
 }
 
+function formatTimestamp(value) {
+  if (!value) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
 export default function QuoteCard({
   quote,
   loading,
@@ -68,10 +80,11 @@ export default function QuoteCard({
 
         <div className="empty-state">
           <p>
-            Set a plan and select <strong>Preview quote</strong>. Mock mode is the
-            default and runs entirely locally. If the backend is configured for
-            the optional 1Click dry source, the preview uses read-only mainnet
-            market data. Neither mode connects a wallet or can move funds.
+            Set a plan and select <strong>Preview quote</strong>. The dry-run
+            quote engine is the default. If the backend is configured to read
+            public market prices, the simulated quantity uses a read-only
+            Coinbase price; otherwise it uses a local reference price. Neither
+            mode connects a wallet or can move funds.
           </p>
         </div>
 
@@ -97,6 +110,19 @@ export default function QuoteCard({
       )
     : null;
   const expired = secondsLeft === 0;
+  const livePrice = quote.priceSource === "coinbase";
+  const fallbackPrice = quote.priceSource === "mock-fallback";
+  const priceLabel = livePrice
+    ? "Coinbase Exchange"
+    : fallbackPrice
+      ? "Labelled fallback"
+      : "Local reference";
+  const observedMs = Date.parse(quote.priceObservedAt);
+  const priceAgeSeconds = Number.isFinite(observedMs)
+    ? Math.max(0, Math.round((now - observedMs) / 1000))
+    : null;
+  const priceAgeLabel =
+    priceAgeSeconds === null ? "age unavailable" : `${priceAgeSeconds}s old`;
 
   if (isLive) {
     const originSymbol = quote.originAsset?.symbol || "USDC";
@@ -237,28 +263,67 @@ export default function QuoteCard({
     >
       <div className="card-heading">
         <div>
-          <p className="eyebrow">Mock quote</p>
-          <h2 id="quote-title">Mock quote · {quote.asset}</h2>
+          <p className="eyebrow">Quote preview</p>
+          <h2 id="quote-title">Dry-run quote · {quote.asset}</h2>
         </div>
         <div className="badge-row">
-          <span className="badge badge-green">Mock — no network call</span>
+          <span className="badge badge-green">Dry-run simulation</span>
+          <span
+            className={`badge ${
+              livePrice
+                ? "badge-blue"
+                : fallbackPrice
+                  ? "badge-amber"
+                  : "badge-muted"
+            }`}
+          >
+            {livePrice
+              ? "Coinbase price"
+              : fallbackPrice
+                ? "Fallback price"
+                : "Local reference price"}
+          </span>
+          {livePrice && quote.priceStale ? (
+            <span className="badge badge-amber">Stale price</span>
+          ) : null}
           <span className={`badge ${expired ? "badge-red" : "badge-blue"}`}>
             {expired ? "Expired" : `${secondsLeft}s left`}
           </span>
         </div>
       </div>
 
-      <div className="warning-box">
-        <strong>Mock quote — no live market data.</strong> This quote comes from
-        the local mock service. No 1Click call, wallet signature, or funds were
-        used.
-      </div>
+      {livePrice ? (
+        <div className="warning-box">
+          <strong>
+            Simulated quote using a real market price — not executable.
+          </strong>{" "}
+          The {quote.asset} price is read-only Coinbase {quote.pair} data
+          observed at {formatTimestamp(quote.priceObservedAt)}. It is not a NEAR
+          Intents quote, and no 1Click call, wallet signature, or funds were
+          used.
+        </div>
+      ) : fallbackPrice ? (
+        <div className="warning-box">
+          <strong>
+            Simulated quote using a fallback reference price — not market data.
+          </strong>{" "}
+          Live market data was unavailable, so a clearly labelled local
+          reference price was used. This is not executable, and no 1Click call,
+          wallet signature, or funds were used.
+        </div>
+      ) : (
+        <div className="warning-box">
+          <strong>Simulated quote using a local reference price.</strong> No live
+          market data was used. No 1Click call, wallet signature, or funds were
+          used.
+        </div>
+      )}
 
       <div className="quote-grid">
         <div>
           <span>Source</span>
-          <strong>Local mock service</strong>
-          <small>Deterministic, generated locally</small>
+          <strong>Local dry-run engine</strong>
+          <small>No 1Click call</small>
         </div>
         <div>
           <span>Route</span>
@@ -275,7 +340,13 @@ export default function QuoteCard({
           <strong>
             {formatAsset(quote.assetAmount, 6)} {quote.asset}
           </strong>
-          <small>Mock estimate</small>
+          <small>
+            {livePrice
+              ? "Simulated from market price"
+              : fallbackPrice
+                ? "Simulated from fallback price"
+                : "Simulated from local reference"}
+          </small>
         </div>
         <div>
           <span>Minimum output</span>
@@ -290,9 +361,12 @@ export default function QuoteCard({
           <small>User-defined cap</small>
         </div>
         <div>
-          <span>Estimate</span>
-          <strong>Instant (mock)</strong>
-          <small>Simulated rate {formatUsd(quote.priceUsd, 4)}</small>
+          <span>Market price</span>
+          <strong>{formatUsd(quote.priceUsd, 4)}</strong>
+          <small>
+            {priceLabel} · {formatTimestamp(quote.priceObservedAt)} ·{" "}
+            {quote.priceStale ? `stale (${priceAgeLabel})` : priceAgeLabel}
+          </small>
         </div>
         <div>
           <span>Fetched</span>
@@ -303,7 +377,7 @@ export default function QuoteCard({
 
       {expired ? (
         <p className="form-error" role="alert">
-          Mock quote expired. Preview a new quote before simulating a fill.
+          Dry-run quote expired. Preview a new quote before simulating a fill.
         </p>
       ) : null}
 
@@ -346,6 +420,9 @@ export default function QuoteCard({
         </button>
       </div>
       <p className="muted small quote-footnote">
+        {livePrice
+          ? "The Coinbase price is read-only and not an executable NEAR Intents quote. "
+          : ""}
         Every action adds a clearly labeled simulated row to history. None sends
         a transaction or moves funds.
       </p>

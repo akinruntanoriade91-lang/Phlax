@@ -188,9 +188,10 @@ export default function PlanForm({
             {loading ? "Building quote…" : "Preview quote"}
           </button>
           <p className="muted small">
-            Uses the configured quote source. Mock mode makes no external calls;
-            optional 1Click dry quotes are read-only mainnet requests. No wallet
-            or deposit address is used.
+            Uses the configured quote and price sources. Local reference prices
+            and dry-run quotes make no external calls; optional Coinbase prices
+            and 1Click dry quotes are read-only requests. No wallet or deposit
+            address is used.
           </p>
         </div>
       </form>

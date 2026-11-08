@@ -14,6 +14,16 @@ const FORBIDDEN_CLIENT_KEYS = new Set([
   "depositmemo",
   "chaindepositaddresses",
   "timewheninactive",
+  "pricesource",
+  "priceusd",
+  "priceusdmicros",
+  "pricemicros",
+  "marketprice",
+  "pricefeed",
+  "priceobservedat",
+  "priceagems",
+  "pricestale",
+  "fallback",
 ]);
 
 function findForbiddenClientKey(value, seen = new Set()) {
@@ -67,7 +77,7 @@ router.post("/", async (req, res) => {
     const quote =
       quoteSource.source === "1click-dry"
         ? await createOneClickDryQuote(req.body)
-        : createMockQuote(req.body);
+        : await createMockQuote(req.body);
 
     return res.status(201).json({
       success: true,

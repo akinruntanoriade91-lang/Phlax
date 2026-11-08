@@ -8,6 +8,7 @@ export default function StrategyCard({
   strategy,
   plan,
   quoteSource,
+  market,
   metaError,
   runLoading,
   runError,
@@ -29,17 +30,38 @@ export default function StrategyCard({
     sourceBadge = "badge-red";
   } else if (quoteSource) {
     sourceLabel = mockReady
-      ? "Mock mode · no external calls"
+      ? "Dry-run quote engine"
       : `${quoteSource.source} · read-only`;
     sourceBadge = mockReady ? "badge-green" : "badge-blue";
   }
+
+  const livePrice = market?.priceSource === "coinbase";
+  const priceBadge = livePrice
+    ? "badge-blue"
+    : market?.priceSource === "mock"
+      ? "badge-muted"
+      : market?.priceSource === "invalid"
+        ? "badge-red"
+        : "badge-muted";
+  const priceLabel = livePrice
+    ? "Coinbase prices · read-only"
+    : market?.priceSource === "mock"
+      ? "Local reference prices"
+      : market?.priceSource === "invalid"
+        ? "Invalid price configuration"
+        : "Price source unknown";
+  const priceFootnote = livePrice
+    ? "Prices are read-only Coinbase market data and are not executable NEAR Intents quotes."
+    : market?.priceSource === "mock"
+      ? "Prices are local reference values; no live market data is used."
+      : "Price source status is unavailable; every row is still simulated.";
 
   let runHint;
 
   if (!strategy) {
     runHint = "Save a strategy first";
   } else if (!mockReady) {
-    runHint = "Run demo requires confirmed mock mode";
+    runHint = "Run demo requires the dry-run quote engine";
   }
 
   return (
@@ -54,6 +76,7 @@ export default function StrategyCard({
             <span className="dot" aria-hidden="true" />
             {sourceLabel}
           </span>
+          <span className={`badge ${priceBadge}`}>{priceLabel}</span>
           {strategy ? (
             <span className="badge badge-blue">
               {strategy.status === "active" ? "Active" : strategy.status}
@@ -148,8 +171,9 @@ export default function StrategyCard({
       </div>
 
       <p className="muted small strategy-footnote">
-        Runs use this saved snapshot and the local mock quote service. Every row
-        is simulated: no wallet, deposit, signature, or transaction is used.
+        Runs use this saved snapshot and the dry-run quote engine.{" "}
+        {priceFootnote} Every row is simulated: no wallet, deposit, signature, or
+        transaction is used.
       </p>
     </section>
   );

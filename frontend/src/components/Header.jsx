@@ -1,22 +1,36 @@
-export default function Header({ quoteSource, metaError }) {
+export default function Header({ quoteSource, market, metaError }) {
   const source = quoteSource?.source;
-  let modeBadge;
+  let quoteBadge;
 
   if (metaError) {
-    modeBadge = <span className="badge badge-red">Quote status unavailable</span>;
+    quoteBadge = <span className="badge badge-red">Quote status unavailable</span>;
   } else if (!quoteSource) {
-    modeBadge = <span className="badge badge-muted">Checking quote source…</span>;
+    quoteBadge = <span className="badge badge-muted">Checking quote source…</span>;
   } else if (source === "mock") {
-    modeBadge = (
+    quoteBadge = (
       <span className="badge badge-green">
         <span className="dot" aria-hidden="true" />
-        Mock mode · no external calls
+        Dry-run quote engine
       </span>
     );
   } else {
-    modeBadge = (
+    quoteBadge = (
       <span className="badge badge-blue">{source} · read-only</span>
     );
+  }
+
+  let priceBadge;
+
+  if (metaError || !market) {
+    priceBadge = <span className="badge badge-muted">Price source unknown</span>;
+  } else if (market.priceSource === "coinbase") {
+    priceBadge = (
+      <span className="badge badge-blue">Coinbase prices · read-only</span>
+    );
+  } else if (market.priceSource === "mock") {
+    priceBadge = <span className="badge badge-muted">Local reference prices</span>;
+  } else {
+    priceBadge = <span className="badge badge-red">Invalid price configuration</span>;
   }
 
   return (
@@ -36,7 +50,8 @@ export default function Header({ quoteSource, metaError }) {
           <span className="dot" aria-hidden="true" />
           Simulation only
         </span>
-        {modeBadge}
+        {quoteBadge}
+        {priceBadge}
         <span className="badge badge-muted">Optional 1Click dry quotes</span>
         <span className="badge badge-muted">v0.3 prototype</span>
       </div>

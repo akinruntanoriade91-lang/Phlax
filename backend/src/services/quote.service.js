@@ -7,17 +7,22 @@ import {
 } from "./quote.limits.js";
 import { getQuoteSourceStatus } from "./oneclick.service.js";
 import {
+  getMarketPrice,
+  getPriceStatus,
+  getReferencePriceUsd,
+} from "./market.service.js";
+import {
   applySlippage,
   baseUnitsToDecimal,
   centsToUsdText,
   mulDivRoundHalfUp,
 } from "./quote.math.js";
 
-const ASSET_PRICES = {
+// Quote targets stay NEAR-only in this phase. The market service can read
+// prices for NEAR, BTC, and ETH, but only NEAR is selectable for a quote.
+const QUOTE_ASSETS = {
   NEAR: {
     name: "NEAR Protocol",
-    priceUsd: 5.2,
-    priceUsdMicros: 5_200_000n,
     decimals: 24,
   },
 };
@@ -25,19 +30,43 @@ const ASSET_PRICES = {
 const FEE_BPS = 30n;
 const QUOTE_TTL_MS = 60_000;
 
-function mockPrice(asset) {
-  const minute = Math.floor(Date.now() / 60_000);
-  const driftBps = (minute % 9) - 4;
-  const priceUsdMicros = mulDivRoundHalfUp(
-    ASSET_PRICES[asset].priceUsdMicros,
-    10_000 + driftBps,
-    10_000
-  );
+function priceWarnings(price) {
+  const warnings = [];
 
-  return {
-    priceUsdMicros,
-    priceUsdText: baseUnitsToDecimal(priceUsdMicros, 6),
-  };
+  if (price.provider === "coinbase") {
+    warnings.push(
+      `Market price: Coinbase Exchange ${price.pair} last trade at ${price.observedAt}.`
+    );
+
+    if (price.stale) {
+      warnings.push(
+        `Market price is stale (${Math.max(
+          1,
+          Math.round(price.ageMs / 1000)
+        )}s old).`
+      );
+    }
+
+    warnings.push(
+      "A market price is not an executable NEAR Intents quote. The token quantity is simulated."
+    );
+  } else if (price.provider === "mock-fallback") {
+    warnings.push(
+      "Live market price unavailable; using the local reference price. This is not market data."
+    );
+    warnings.push(
+      "The token quantity is simulated and is not an executable NEAR Intents quote."
+    );
+  } else {
+    warnings.push(
+      "Mock reference price generated locally. No live market data was used."
+    );
+    warnings.push(
+      "The token quantity is simulated and is not an executable NEAR Intents quote."
+    );
+  }
+
+  return warnings;
 }
 
 export function getQuoteMeta() {
@@ -49,10 +78,11 @@ export function getQuoteMeta() {
     network: quoteSource.network,
     nearNetworkPlanned: process.env.NEAR_NETWORK || "testnet",
     quoteSource,
-    assets: Object.entries(ASSET_PRICES).map(([symbol, info]) => ({
+    market: getPriceStatus(),
+    assets: Object.entries(QUOTE_ASSETS).map(([symbol, info]) => ({
       symbol,
       name: info.name,
-      referencePriceUsd: info.priceUsd,
+      referencePriceUsd: getReferencePriceUsd(symbol),
     })),
     limits: {
       minAmountUsd: MIN_AMOUNT_USD,
@@ -63,11 +93,12 @@ export function getQuoteMeta() {
   };
 }
 
-export function createMockQuote(input = {}) {
+export async function createMockQuote(input = {}) {
   const { amountUsd, amountUsdCents, asset, slippageBps } =
     validateQuoteInput(input);
-  const assetInfo = ASSET_PRICES[asset];
-  const { priceUsdMicros, priceUsdText } = mockPrice(asset);
+  const assetInfo = QUOTE_ASSETS[asset];
+  const price = await getMarketPrice(asset);
+  const priceUsdMicros = BigInt(price.priceUsdMicros);
   const amountCents = BigInt(amountUsdCents);
   const feeCents = mulDivRoundHalfUp(amountCents, FEE_BPS, 10_000n);
   const netCents = amountCents - feeCents;
@@ -101,7 +132,11 @@ export function createMockQuote(input = {}) {
     amountUsdCents,
     feeUsd: centsToUsdText(feeCents),
     netUsd: centsToUsdText(netCents),
-    priceUsd: priceUsdText,
+    priceUsd: price.priceUsdText,
+    priceSource: price.provider,
+    priceObservedAt: price.observedAt,
+    priceAgeMs: price.ageMs,
+    priceStale: price.stale,
     assetAmount,
     amountOut: outputBaseUnits.toString(),
     amountOutFormatted: assetAmount,
@@ -112,7 +147,8 @@ export function createMockQuote(input = {}) {
     createdAt: createdAt.toISOString(),
     expiresAt: new Date(createdAt.getTime() + QUOTE_TTL_MS).toISOString(),
     warnings: [
-      "Mock quote generated locally. No 1Click API call was made.",
+      "Dry-run quote generated locally. No 1Click API call was made.",
+      ...priceWarnings(price),
       "No funds can move in dry-run mode.",
     ],
   };

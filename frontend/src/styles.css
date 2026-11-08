@@ -241,6 +241,12 @@ h2 {
   color: var(--red);
 }
 
+.badge-amber {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
 .badge-muted {
   color: var(--muted);
 }

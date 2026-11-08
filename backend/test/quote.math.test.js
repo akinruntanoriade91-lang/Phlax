@@ -60,8 +60,8 @@ test("applies slippage with floor rounding to protect the minimum output", () =>
   assert.throws(() => applySlippage("1000000", 10_001), /between 0 and 10000/);
 });
 
-test("mock quote derives minimum output from precise raw output", () => {
-  const quote = createMockQuote({
+test("mock quote derives minimum output from precise raw output", async () => {
+  const quote = await createMockQuote({
     amountUsd: "14.29",
     asset: "NEAR",
     slippageBps: 50,

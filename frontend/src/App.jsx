@@ -35,6 +35,7 @@ export default function App() {
   const [runLoading, setRunLoading] = useState(false);
   const [runError, setRunError] = useState("");
   const [quoteSource, setQuoteSource] = useState(null);
+  const [market, setMarket] = useState(null);
   const [metaError, setMetaError] = useState("");
 
   const math = useMemo(() => getPlanMath(plan), [plan]);
@@ -54,12 +55,14 @@ export default function App() {
         if (!active) return;
 
         setQuoteSource(payload?.data?.quoteSource ?? null);
+        setMarket(payload?.data?.market ?? null);
         setMetaError("");
       })
       .catch(() => {
         if (!active) return;
 
         setQuoteSource(null);
+        setMarket(null);
         setMetaError("Quote status unavailable");
       });
 
@@ -136,7 +139,7 @@ export default function App() {
 
       if (payload.data?.source !== "mock") {
         throw new Error(
-          "The run demo requires mock mode. No simulated cycles were added."
+          "The run demo requires the dry-run quote engine. No simulated cycles were added."
         );
       }
 
@@ -211,11 +214,24 @@ export default function App() {
       }
 
       setQuote(payload.data);
-      setNotice(
-        payload.data?.source === "1click-dry"
-          ? "Live 1Click dry quote — mainnet market data, no transaction."
-          : "Mock quote received from the local mock API. No live market data was used."
-      );
+
+      let quoteNotice;
+
+      if (payload.data?.source === "1click-dry") {
+        quoteNotice =
+          "Live 1Click dry quote — mainnet market data, no transaction.";
+      } else if (payload.data?.priceSource === "coinbase") {
+        quoteNotice =
+          "Dry-run quote simulated with a read-only Coinbase market price. It is not an executable NEAR Intents quote.";
+      } else if (payload.data?.priceSource === "mock-fallback") {
+        quoteNotice =
+          "Dry-run quote using a labelled local reference price because live market data was unavailable. Not market data, and not executable.";
+      } else {
+        quoteNotice =
+          "Dry-run quote using the local reference price. No live market data was used.";
+      }
+
+      setNotice(quoteNotice);
     } catch (requestError) {
       setError(
         requestError.message ||
@@ -258,7 +274,7 @@ export default function App() {
       <div className="ambient ambient-two" aria-hidden="true" />
 
       <div className="container">
-        <Header quoteSource={quoteSource} metaError={metaError} />
+        <Header quoteSource={quoteSource} market={market} metaError={metaError} />
 
         <main>
           <section className="hero">
@@ -271,7 +287,8 @@ export default function App() {
             <p className="hero-copy">
               A NEAR-only dry-run prototype for a non-custodial DCA vault. Build
               a plan, preview a quote, and inspect fill, failure, and refund
-              outcomes. Mock quotes are the default; an optional read-only
+              outcomes. The quote engine is a dry-run simulation by default and
+              can optionally read public Coinbase prices; an optional read-only
               1Click dry-quote source can use mainnet market data when enabled
               locally. Wallet connection, transaction execution, and cross-chain
               deposits remain roadmap items.
@@ -281,7 +298,10 @@ export default function App() {
                 <span className="dot" aria-hidden="true" />
                 Dry-run simulation
               </span>
-              <span className="badge">Mock quotes by default</span>
+              <span className="badge">Dry-run quotes by default</span>
+              <span className="badge badge-blue">
+                Optional read-only Coinbase prices
+              </span>
               <span className="badge badge-blue">
                 Optional 1Click dry quotes
               </span>
@@ -303,6 +323,7 @@ export default function App() {
             strategy={strategy}
             plan={plan}
             quoteSource={quoteSource}
+            market={market}
             metaError={metaError}
             runLoading={runLoading}
             runError={runError}
@@ -352,9 +373,10 @@ export default function App() {
             funds, no wallet connection, and no financial advice.
           </p>
           <p className="muted small">
-            Frontend: Vite + React · Backend: Express quote service · Mock by
-            default, optional read-only 1Click dry quotes · No wallet libraries,
-            deposits, or transactions.
+            Frontend: Vite + React · Backend: Express quote service · Dry-run
+            quotes by default, optional read-only Coinbase prices, optional
+            read-only 1Click dry quotes · No wallet libraries, deposits, or
+            transactions.
           </p>
         </footer>
       </div>

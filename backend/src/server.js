@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import express from "express";
 import quoteRoutes from "./routes/quote.routes.js";
+import { getPriceStatus } from "./services/market.service.js";
 import { getQuoteSourceStatus } from "./services/oneclick.service.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,7 @@ app.use((req, res, next) => {
 
 app.get("/api/health", (req, res) => {
   const quoteSource = getQuoteSourceStatus();
+  const priceSource = getPriceStatus();
 
   res.status(200).json({
     success: true,
@@ -48,9 +50,12 @@ app.get("/api/health", (req, res) => {
       nearNetworkPlanned: NEAR_NETWORK,
       externalCalls: quoteSource.liveRequestsEnabled
         ? "1click-dry-quote-only"
-        : "disabled",
+        : priceSource.liveRequestsEnabled
+          ? "public-market-data-only"
+          : "disabled",
       wallet: "disabled-in-demo",
       quoteSource,
+      priceSource,
     },
   });
 });
@@ -79,14 +84,20 @@ app.use((error, req, res, next) => {
 
 app.listen(PORT, () => {
   const quoteSource = getQuoteSourceStatus();
+  const priceSource = getPriceStatus();
   const sourceDetail = quoteSource.liveRequestsEnabled
     ? quoteSource.configured
       ? "mainnet dry quotes only, configured"
       : `mainnet dry quotes only, missing ${quoteSource.missingConfiguration.join(", ")}`
-    : "local mock, no external calls";
+    : "local dry-run engine";
+  const priceDetail = priceSource.liveRequestsEnabled
+    ? "Coinbase public market data, read-only"
+    : priceSource.priceSource === "invalid"
+      ? "invalid configuration"
+      : "local reference, no external calls";
 
   console.log(`Phlax API (dry-run) running on http://localhost:${PORT}`);
   console.log(
-    `Network: not connected (NEAR ${NEAR_NETWORK} planned) | Quote source: ${quoteSource.source} (${sourceDetail}) | Wallet: disabled in demo`
+    `Network: not connected (NEAR ${NEAR_NETWORK} planned) | Quote source: ${quoteSource.source} (${sourceDetail}) | Price source: ${priceSource.priceSource} (${priceDetail}) | Wallet: disabled in demo`
   );
 });

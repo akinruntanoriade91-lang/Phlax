@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "check": "node --check src/server.js && node --check src/routes/quote.routes.js && node --check src/services/quote.service.js && node --check src/services/quote.limits.js && node --check src/services/quote.math.js && node --check src/services/oneclick.service.js",
+    "check": "node --check src/server.js && node --check src/routes/quote.routes.js && node --check src/services/quote.service.js && node --check src/services/quote.limits.js && node --check src/services/quote.math.js && node --check src/services/oneclick.service.js && node --check src/services/market.service.js",
     "test": "node --test"
   },
   "dependencies": {
